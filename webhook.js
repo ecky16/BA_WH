@@ -1,7 +1,9 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 
-// Token Bot Telegram Mas Ecky
+
+
+// Token Bot diambil dari Environment Variables Vercel biar aman
 const token = process.env.TELEGRAM_TOKEN; 
 const bot = new TelegramBot(token);
 
@@ -12,45 +14,75 @@ module.exports = async (req, res) => {
   try {
     const { body } = req;
     
-    if (body.message && body.message.photo && body.message.caption) {
+    if (body.message) {
       const msg = body.message;
       const chatId = msg.chat.id;
       const namaUser = msg.from.first_name;
 
-      // 1. Kasih tahu Mas Ecky kalau proses sedang berjalan
-      await bot.sendMessage(chatId, `⏳ Siap Mas ${namaUser}! Data diterima, PDF sedang diproses. Mohon tunggu sebentar ya...`);
+      // === FITUR BANTUAN (/help atau /start) ===
+      if (msg.text === '/start' || msg.text === '/help' || msg.text === '/bantuan') {
+        const pesanBantuan = `Halo Mas ${namaUser}! 👋\nIni adalah Bot BA WH Otomatis.\n\n` +
+          `📌 *CARA PENGGUNAAN:*\n` +
+          `Kirim *FOTO EVIDENCE* dan wajib sertakan *CAPTION* dengan susunan berikut:\n\n` +
+          `Nama Project | Tanggal | Nomor ID\n` +
+          `Nama Barang 1, Satuan, Qty\n` +
+          `Nama Barang 2, Satuan, Qty\n\n` +
+          `💡 *CONTOH CAPTION (Tinggal Copas & Edit):*\n` +
+          `GAMAS feeder GPON03 | 11/03/2026 | ID-0214\n` +
+          `KU ADSS 48, Meter, 190\n` +
+          `UC 24, Bh, 4\n\n` +
+          `⚠️ *CATATAN PENTING:*\n` +
+          `- Pisahkan info di baris pertama dengan garis lurus ( | )\n` +
+          `- Pisahkan detail barang dengan koma ( , )\n` +
+          `- Pastikan pakai enter untuk setiap barang baru.\n\n` +
+          `Silakan langsung kirim fotonya Mas! 🚀`;
 
-      // 2. Ambil URL file foto dari Telegram
-      const fileId = msg.photo[msg.photo.length - 1].file_id;
-      const fileUrl = await bot.getFileLink(fileId);
+        await bot.sendMessage(chatId, pesanBantuan, { parse_mode: "Markdown" });
+        return res.status(200).send('OK');
+      }
 
-      // 3. Ekstrak teks caption
-      const lines = msg.caption.split('\n');
-      const infoUtama = lines[0].split('|').map(item => item.trim());
-      const project = infoUtama[0] || "-";
-      const tanggal = infoUtama[1] || "-";
-      const nomorId = infoUtama[2] || "-";
-      const rawBarang = lines.slice(1).join('\n');
+      // === PROSES TERIMA FOTO & DATA ===
+      if (msg.photo && msg.caption) {
+        // 1. Kasih tahu kalau proses sedang berjalan
+        await bot.sendMessage(chatId, `⏳ Siap Mas ${namaUser}! Data diterima, PDF sedang diproses. Mohon tunggu sebentar ya...`);
 
-      // 4. Siapkan data, TAMBAHKAN chatId agar GAS bisa membalas ke Telegram
-      const payload = {
-        tanggal: tanggal,
-        project: project,
-        nomorId: nomorId,
-        rawBarang: rawBarang,
-        fileUrl: fileUrl,
-        chatId: chatId,    // Penting untuk kirim balik PDF
-        namaUser: namaUser // Penting untuk sapaan
-      };
+        // 2. Ambil URL file foto dari Telegram
+        const fileId = msg.photo[msg.photo.length - 1].file_id;
+        const fileUrl = await bot.getFileLink(fileId);
 
-      // 5. Lempar ke Google Apps Script secara asinkron (tidak perlu ditunggu)
-      axios.post(appsScriptUrl, payload).catch(err => console.error(err));
-      
+        // 3. Ekstrak teks caption
+        const lines = msg.caption.split('\n');
+        const infoUtama = lines[0].split('|').map(item => item.trim());
+        const project = infoUtama[0] || "-";
+        const tanggal = infoUtama[1] || "-";
+        const nomorId = infoUtama[2] || "-";
+        const rawBarang = lines.slice(1).join('\n');
+
+        // 4. Siapkan payload ke Google Apps Script
+        const payload = {
+          tanggal: tanggal,
+          project: project,
+          nomorId: nomorId,
+          rawBarang: rawBarang,
+          fileUrl: fileUrl,
+          chatId: chatId,    
+          namaUser: namaUser 
+        };
+
+        // 5. Lempar ke Google Apps Script
+        axios.post(appsScriptUrl, payload).catch(err => console.error("Error ke GAS:", err));
+        
+      } else if (msg.photo && !msg.caption) {
+        // Kalau user kirim foto tapi lupa kasih caption
+        await bot.sendMessage(chatId, `Waduh Mas ${namaUser}, fotonya kelupaan dikasih caption datanya nih. Coba kirim ulang fotonya sekalian pakai caption ya! Ketik /help untuk lihat contohnya.`);
+      } else if (msg.text && msg.text !== '/start' && msg.text !== '/help') {
+        // Kalau user cuma kirim teks tanpa foto
+        await bot.sendMessage(chatId, `Mas ${namaUser}, jangan lupa kirimnya harus berupa FOTO yang dikasih caption ya. Ketik /help untuk lihat panduan.`);
+      }
     }
   } catch (error) {
     console.error("Error Webhook:", error);
   }
   
-  // Wajib kembalikan status 200 agar Telegram tidak error
   res.status(200).send('OK');
 };

@@ -2,11 +2,11 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 
 // Token Bot Telegram Mas Ecky
-const token = '8203229710:AAGso4pqAAbDbLqp5B2XS9zmltfiDxzIB9A'; 
+const token = process.env.TELEGRAM_TOKEN; 
 const bot = new TelegramBot(token);
 
 // URL WEB APP GOOGLE APPS SCRIPT MAS
-const appsScriptUrl = 'MASUKKAN_URL_GAS_DISINI'; 
+const appsScriptUrl = 'https://script.google.com/macros/s/AKfycbz0X95RzBF-NWFYWYZ-tAk5n7UsWlU4nZVAoga7wqRaR-C9Fwe85zcMoAaoC2Y0kpa8/exec'; 
 
 module.exports = async (req, res) => {
   try {

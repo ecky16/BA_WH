@@ -1,8 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 
-
-
 // Token Bot diambil dari Environment Variables Vercel biar aman
 const token = process.env.TELEGRAM_TOKEN; 
 const bot = new TelegramBot(token);
@@ -18,6 +16,13 @@ module.exports = async (req, res) => {
       const msg = body.message;
       const chatId = msg.chat.id;
       const namaUser = msg.from.first_name;
+
+      // === [UPGRADE 1] ANTI-SPAM ALBUM FOTO ===
+      // Jika mengirim banyak foto sekaligus (album), abaikan pesan foto tanpa caption 
+      // agar bot tidak spam membalas error berkali-kali.
+      if (msg.photo && !msg.caption && msg.media_group_id) {
+        return res.status(200).send('OK');
+      }
 
       // === FITUR BANTUAN (/help atau /start) ===
       if (msg.text === '/start' || msg.text === '/help' || msg.text === '/bantuan') {
@@ -43,6 +48,17 @@ module.exports = async (req, res) => {
 
       // === PROSES TERIMA FOTO & DATA ===
       if (msg.photo && msg.caption) {
+        
+        const lines = msg.caption.split('\n');
+        const infoUtama = lines[0].split('|').map(item => item.trim());
+
+        // === [UPGRADE 2] VALIDASI FORMAT BARIS PERTAMA ===
+        // Mencegah PDF berantakan kalau Mas lupa ketik tanda pemisah (|)
+        if (infoUtama.length < 3) {
+          await bot.sendMessage(chatId, `⚠️ Waduh Mas ${namaUser}, format baris pertamanya ada yang kurang nih.\nPastikan pakai tanda pemisah ( | ) untuk: *Nama Project | Tanggal | Nomor ID*\n\nContoh: GAMAS GPON03 | 11/03/2026 | ID-0214`, { parse_mode: "Markdown" });
+          return res.status(200).send('OK');
+        }
+
         // 1. Kasih tahu kalau proses sedang berjalan
         await bot.sendMessage(chatId, `⏳ Siap Mas ${namaUser}! Data diterima, PDF sedang diproses. Mohon tunggu sebentar ya...`);
 
@@ -50,19 +66,18 @@ module.exports = async (req, res) => {
         const fileId = msg.photo[msg.photo.length - 1].file_id;
         const fileUrl = await bot.getFileLink(fileId);
 
-        // 3. Ekstrak teks caption
-        const lines = msg.caption.split('\n');
-        const infoUtama = lines[0].split('|').map(item => item.trim());
-        const project = infoUtama[0] || "-";
+        // 3. Ekstrak data yang sudah bersih 
+        // === [UPGRADE 3] PENYELARASAN VARIABEL ===
+        const nama_project = infoUtama[0] || "-";
         const tanggal = infoUtama[1] || "-";
-        const nomorId = infoUtama[2] || "-";
+        const nomor_id = infoUtama[2] || "-";
         const rawBarang = lines.slice(1).join('\n');
 
         // 4. Siapkan payload ke Google Apps Script
         const payload = {
+          nama_project: nama_project,
           tanggal: tanggal,
-          project: project,
-          nomorId: nomorId,
+          nomor_id: nomor_id,
           rawBarang: rawBarang,
           fileUrl: fileUrl,
           chatId: chatId,    
